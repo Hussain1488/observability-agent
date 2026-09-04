@@ -1,8 +1,7 @@
-
 router:
-  model: null   
+  model: null
   temperature: 0.0
-  fallback_route: general
+  fallback_route: support
 
 agents:
   traces:
@@ -75,7 +74,7 @@ agents:
     temperature: 0.0
     tools: [search_code, get_recent_commits]
 
-  general:
+  support:
     description: >
       Fallback for greetings, small talk, or anything that does not clearly belong to
       traces, logs, metrics, docs, or code.
