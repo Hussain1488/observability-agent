@@ -2,15 +2,13 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.core.config import settings
-from app.orchestration.prompts import PROMPT
+from app.core.agents import get_agent, ModelConfig
 
-from app.core.llm import get_model, ModelConfig
-
-model = get_model(ModelConfig(provider="chatgpt", model="gpt-5o-nano"))
+model = get_agent(ModelConfig("support"))
 
 
 async def call_model(state: MessagesState):
+
     formatted_prompt = PROMPT.invoke({"message": state["messages"][-1].content})
     response = await model.ainvoke(formatted_prompt)
     return {"messages": [response]}
