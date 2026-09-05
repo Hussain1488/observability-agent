@@ -184,8 +184,9 @@ to `support` when classification fails; the endpoint streams and rejects bad inp
 ## 9. Conversation memory
 
 **Decision:** The graph is compiled with LangGraph's `InMemorySaver`, and every request
-uses a single shared thread id (`DEFAULT_THREAD_ID` in `app/core/config.py`). `ChatRequest`
-exposes `thread_id` so a caller *can* override it, but it is not required.
+uses a single shared thread id — the default `thread_id` argument of `stream_chat()` in
+`app/orchestration/graph.py`. The API does not expose it, so callers cannot choose or
+override the conversation they write into.
 
 **Why one shared thread:** The checkpointer keys conversations by `thread_id`, so something
 has to supply that key. This service has no authentication, and accepting a session id from

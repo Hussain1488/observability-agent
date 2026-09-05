@@ -88,8 +88,8 @@ The API is at `http://127.0.0.1:8000`.
 
 Responds with `text/plain` streamed token by token as the agent generates it.
 
-An optional `thread_id` continues an existing conversation. It defaults to a single
-shared thread, so all callers currently share one history — see
+All requests share one conversation thread, so history accumulates across callers and is
+lost on restart. The thread id is not part of the request body — see
 [Conversation memory](DESIGN.md#9-conversation-memory) for why, and what production
 would do instead.
 
