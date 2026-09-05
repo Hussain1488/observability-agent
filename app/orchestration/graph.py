@@ -1,27 +1,113 @@
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
 
-from app.core.agents import get_agent, ModelConfig
+from app.core.agents import agent_names, get_agent, get_orchestrator_agent
+from app.orchestration.schemas import RoutingResponse
 
-model = get_agent(ModelConfig("support"))
+
+class GraphState(MessagesState):
+    selected_agent: str
 
 
-async def call_model(state: MessagesState):
+def _add_agent_nodes(builder: StateGraph, agent_name: str) -> None:
+    model, system_prompt, tools = get_agent(agent_name)
+    system_message = SystemMessage(content=system_prompt)
 
-    formatted_prompt = PROMPT.invoke({"message": state["messages"][-1].content})
-    response = await model.ainvoke(formatted_prompt)
-    return {"messages": [response]}
+    if tools:
+        model = model.bind_tools(tools)
+
+    async def agent_node(state: GraphState):
+        response = await model.ainvoke([system_message, *state["messages"]])
+        return {"messages": [response]}
+
+    builder.add_node(agent_name, agent_node)
+
+    if not tools:
+        builder.add_edge(agent_name, END)
+        return
+
+    tools_name = f"{agent_name}_tools"
+    builder.add_node(tools_name, ToolNode(tools))
+    builder.add_conditional_edges(
+        agent_name, tools_condition, {"tools": tools_name, END: END}
+    )
+    builder.add_edge(tools_name, agent_name)
+
+
+def _build_orchestrator_node():
+    model, system_prompt, fallback_route = get_orchestrator_agent()
+    router = model.with_structured_output(RoutingResponse)
+    system_message = SystemMessage(content=system_prompt)
+
+    async def orchestrator(state: GraphState):
+        try:
+            decision = await router.ainvoke([system_message, state["messages"][-1]])
+            route = decision.routes
+        except Exception:
+            route = fallback_route
+        return {"selected_agent": route}
+
+    return orchestrator
 
 
 def build_graph():
-    builder = StateGraph(MessagesState)
+    names = agent_names()
+    builder = StateGraph(GraphState)
 
-    builder.add_node("model", call_model)
-    
-    builder.add_edge(START, "model")
-    builder.add_edge("model", END)
+    builder.add_node("orchestrator", _build_orchestrator_node())
+    for name in names:
+        _add_agent_nodes(builder, name)
 
-    checkpointer = InMemorySaver()
+    builder.add_edge(START, "orchestrator")
+    builder.add_conditional_edges(
+        "orchestrator", lambda state: state["selected_agent"], names
+    )
 
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+_graph = None
+
+
+def get_graph():
+    global _graph
+    if _graph is None:
+        _graph = build_graph()
+    return _graph
+
+
+async def stream_chat(message: str, thread_id: str= "10101010"):
+    """Yield routing, token, and tool events for one user message."""
+    graph = get_graph()
+    agents = set(agent_names())
+
+    async for mode, payload in graph.astream(
+        {"messages": [HumanMessage(content=message)]},
+        config={"configurable": {"thread_id": thread_id}},
+        stream_mode=["messages", "updates"],
+    ):
+        if mode == "messages":
+            chunk, metadata = payload
+            if metadata.get("langgraph_node") in agents and chunk.text:
+                yield {"type": "token", "text": chunk.text}
+            continue
+
+        for node_name, update in payload.items():
+            if node_name == "orchestrator":
+                yield {"type": "route", "agent": update["selected_agent"]}
+            elif node_name.endswith("_tools"):
+                for tool_message in update["messages"]:
+                    yield {
+                        "type": "tool_result",
+                        "tool": tool_message.name,
+                        "content": tool_message.content,
+                    }
+            elif node_name in agents:
+                for tool_call in getattr(update["messages"][-1], "tool_calls", []):
+                    yield {
+                        "type": "tool_call",
+                        "tool": tool_call["name"],
+                        "args": tool_call["args"],
+                    }

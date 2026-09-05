@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Literal
 
 class RoutingDecision(BaseModel):
     agent: str
 
 class RoutingResponse(BaseModel):
-    routes: str = Literal["traces","logs","metrics","docs", "codes", "support"]
+    routes: Literal["traces","logs","metrics","docs", "codes", "support"] = Field(description="The list of Agents to answer user message based on their tools and mission." )
