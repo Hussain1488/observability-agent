@@ -87,7 +87,7 @@ def get_graph() -> CompiledStateGraph:
     return _graph
 
 
-async def stream_chat(message: str, thread_id: str= "10101010") ->AsyncIterator[dict]:
+async def stream_chat(message: str, thread_id: str = "10101010") -> AsyncIterator[dict]:
     """Yield routing, token, and tool events for one user message."""
     graph = get_graph()
     agents = set(agent_names())
@@ -123,7 +123,7 @@ async def stream_chat(message: str, thread_id: str= "10101010") ->AsyncIterator[
                         "args": tool_call["args"],
                     }
 
-async def stream_tokens(message: str, thread_id: str = "10101010") ->AsyncIterator[str]:
+async def stream_tokens(message: str, thread_id: str = "10101010") -> AsyncIterator[str]:
     async for event in stream_chat(message, thread_id):
         if event["type"] == "token":
             yield event["text"]
