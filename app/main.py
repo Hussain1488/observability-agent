@@ -2,10 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+import logging
 
 from app.api.chat import router as chat_router
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO, filename="app.log")
 
 app = FastAPI()
 

@@ -44,12 +44,15 @@ def _build_orchestrator_node():
     system_message = SystemMessage(content=system_prompt)
 
     async def orchestrator(state: GraphState):
+        question = state["messages"][-1]
+        logger.info("Routing question: %s", question.content)
         try:
-            decision = await router.ainvoke([system_message, state["messages"][-1]])
-            route = decision.routes
+            decision = await router.ainvoke([system_message, question])
+            logger.info("Routed to '%s': %s", decision.routes, decision.reasoning)
+            return {"selected_agent": decision.routes}
         except Exception:
-            route = fallback_route
-        return {"selected_agent": route}
+            logger.exception("Routing failed, falling back to '%s'", fallback_route)
+            return {"selected_agent": fallback_route}
 
     return orchestrator
 
@@ -67,6 +70,7 @@ def build_graph():
         "orchestrator", lambda state: state["selected_agent"], names
     )
 
+    logger.info("Building graph with agents: %s", names)
     return builder.compile(checkpointer=InMemorySaver())
 
 
@@ -101,6 +105,7 @@ async def stream_chat(message: str, thread_id: str= "10101010"):
                 yield {"type": "route", "agent": update["selected_agent"]}
             elif node_name.endswith("_tools"):
                 for tool_message in update["messages"]:
+                    logger.debug("Tool '%s' returned: %s", tool_message.name, tool_message.content)
                     yield {
                         "type": "tool_result",
                         "tool": tool_message.name,
@@ -108,6 +113,7 @@ async def stream_chat(message: str, thread_id: str= "10101010"):
                     }
             elif node_name in agents:
                 for tool_call in getattr(update["messages"][-1], "tool_calls", []):
+                    logger.info("Agent '%s' calling tool %s(%s)", node_name, tool_call["name"], tool_call["args"])
                     yield {
                         "type": "tool_call",
                         "tool": tool_call["name"],

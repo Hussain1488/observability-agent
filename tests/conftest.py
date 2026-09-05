@@ -60,7 +60,7 @@ class FakeChatModel(BaseChatModel):
         def _route(_):
             if self.routing_error:
                 raise RuntimeError("model refused to route")
-            return RoutingResponse(routes=self.route)
+            return RoutingResponse(routes=self.route, reasoning="test reasoning")
 
         return RunnableLambda(_route)
 
