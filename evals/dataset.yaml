@@ -1,0 +1,239 @@
+# Evaluation dataset: 25 questions covering all six routes.
+#
+# expected_route  - the agent the orchestrator should pick (exact match scoring)
+# expected_tools  - tools the agent should call (a hit if any of them is called)
+# expected_answer - human-readable reference answer, taken from the mock tool data
+# key_facts       - distinctive strings; the generated answer is "grounded" if any appear
+
+questions:
+  # ---------------------------------------------------------------- traces (5)
+  - id: 1
+    question: Why is the checkout service slow?
+    expected_route: traces
+    expected_tools: [get_trace, get_slow_spans]
+    expected_answer: >
+      The db.query on cart_items is the slowest span at ~1450ms, roughly 68% of the
+      2140ms trace. The likely bottleneck is a missing index on cart_id.
+    key_facts: ["cart_items", "1450", "db.query"]
+
+  - id: 2
+    question: What is the slowest span in the checkout trace?
+    expected_route: traces
+    expected_tools: [get_trace, get_slow_spans]
+    expected_answer: >
+      db.query SELECT * FROM cart_items at 1450ms, about 68% of the total trace time.
+    key_facts: ["cart_items", "db.query", "1450"]
+
+  - id: 3
+    question: Show me the p99 latency of the slowest spans for the payments service.
+    expected_route: traces
+    expected_tools: [get_slow_spans]
+    expected_answer: >
+      grpc.server authorize has p99=5000ms and http.client fraud-check.verify p99=4800ms;
+      fraud-check calls are timing out upstream and cascading into 504s.
+    key_facts: ["5000", "4800", "fraud-check"]
+
+  - id: 4
+    question: Where is time being spent across services during checkout requests?
+    expected_route: traces
+    expected_tools: [get_trace, get_slow_spans]
+    expected_answer: >
+      Of the 2140ms total, db.query takes 1450ms, grpc.call payments.authorize 410ms,
+      http.request 220ms and cache.write 60ms.
+    key_facts: ["2140", "1450", "410", "db.query"]
+
+  - id: 5
+    question: Are there any timeouts in the distributed traces for payments?
+    expected_route: traces
+    expected_tools: [get_slow_spans]
+    expected_answer: >
+      Yes. grpc.server authorize reaches p99=5000ms and the downstream
+      fraud-check.verify call times out, cascading into 504 responses.
+    key_facts: ["5000", "fraud-check", "504", "timing out"]
+
+  # ------------------------------------------------------------------ logs (4)
+  - id: 6
+    question: What errors is the payments service throwing?
+    expected_route: logs
+    expected_tools: [get_error_logs, search_logs]
+    expected_answer: >
+      All 298 errors are "upstream fraud-check.verify returned 504 Gateway Timeout" —
+      100% of the error volume in the last hour.
+    key_facts: ["504", "fraud-check", "298"]
+
+  - id: 7
+    question: Search the logs for 504 timeout errors.
+    expected_route: logs
+    expected_tools: [search_logs]
+    expected_answer: >
+      812 matching lines. checkout logs "context deadline exceeded" 654 times and
+      payments logs 504 Gateway Timeout 298 times; the pattern began at 09:14 UTC.
+    key_facts: ["504", "812", "654", "09:14"]
+
+  - id: 8
+    question: What is the most frequent error in the checkout service logs?
+    expected_route: logs
+    expected_tools: [get_error_logs]
+    expected_answer: >
+      The slow query on cart_items exceeding the 1000ms threshold, at 1,204 occurrences
+      or 59.9% of the 2,010 total errors.
+    key_facts: ["cart_items", "1,204", "1204", "59.9"]
+
+  - id: 9
+    question: Are there any exceptions or stack traces mentioning the cart table?
+    expected_route: logs
+    expected_tools: [search_logs]
+    expected_answer: >
+      1,204 lines warn about a slow query on the cart_items table at 1450ms, correlating
+      with the db.query span latency seen in traces.
+    key_facts: ["cart_items", "1450", "slow query"]
+
+  # --------------------------------------------------------------- metrics (5)
+  - id: 10
+    question: What is the current error rate for the checkout service?
+    expected_route: metrics
+    expected_tools: [get_error_rate]
+    expected_answer: >
+      18.4% against a 0.6% baseline, a +17.8pp increase that began at 09:14 UTC.
+    key_facts: ["18.4", "0.6", "17.8"]
+
+  - id: 11
+    question: How does the payments error rate compare to its baseline?
+    expected_route: metrics
+    expected_tools: [get_error_rate]
+    expected_answer: >
+      22.1% versus a 0.3% baseline, +21.8pp, driven entirely by fraud-check.verify
+      504 Gateway Timeouts.
+    key_facts: ["22.1", "0.3", "21.8"]
+
+  - id: 12
+    question: Is CPU usage the bottleneck for the checkout pods?
+    expected_route: metrics
+    expected_tools: [get_metric]
+    expected_answer: >
+      No. CPU utilisation is 38%, down slightly from 41% an hour ago and stable — CPU is
+      not the bottleneck.
+    key_facts: ["38", "41", "not the bottleneck", "stable"]
+
+  - id: 13
+    question: What is the request throughput for checkout right now?
+    expected_route: metrics
+    expected_tools: [get_metric]
+    expected_answer: >
+      142 req/s, down from 210 req/s an hour ago — a 32% decline consistent with
+      client-side timeouts and abandoned checkouts.
+    key_facts: ["142", "210", "32"]
+
+  - id: 14
+    question: Show me the p99 latency metric trend for checkout.
+    expected_route: metrics
+    expected_tools: [get_metric]
+    expected_answer: >
+      checkout.request.latency.p99 is 2140ms versus 310ms an hour ago, rising sharply
+      since 09:14 UTC (+590%).
+    key_facts: ["2140", "310", "590"]
+
+  # ------------------------------------------------------------------ docs (4)
+  - id: 15
+    question: Where is the runbook for a downstream timeout?
+    expected_route: docs
+    expected_tools: [get_runbook]
+    expected_answer: >
+      The 'downstream-timeout' runbook: identify the failing downstream via slow spans,
+      check its error logs, confirm whether its own dependency is degraded, then apply a
+      circuit breaker and notify the on-call.
+    key_facts: ["downstream-timeout", "circuit breaker", "on-call"]
+
+  - id: 16
+    question: How do I investigate high latency in the checkout service?
+    expected_route: docs
+    expected_tools: [get_runbook]
+    expected_answer: >
+      Follow the 'checkout-high-latency' runbook: check the trace for the slowest span,
+      look for a missing index on cart_items, check the payments error rate, page the
+      payments on-call if 504s are present, then file an incident ticket.
+    key_facts: ["checkout-high-latency", "cart_items", "index"]
+
+  - id: 17
+    question: What do the docs say about how the payments service calls the fraud provider?
+    expected_route: docs
+    expected_tools: [search_docs]
+    expected_answer: >
+      Per docs/payments/architecture.md, payments calls the third-party fraud-check
+      provider synchronously with a 5s timeout; provider incidents surface as 504s and
+      propagate to callers unless a circuit breaker is configured.
+    key_facts: ["architecture.md", "5s", "circuit breaker", "504"]
+
+  - id: 18
+    question: Is there documentation about the checkout data model and indexes?
+    expected_route: docs
+    expected_tools: [search_docs]
+    expected_answer: >
+      Yes — docs/checkout/data-model.md states cart_items is queried by cart_id on every
+      checkout request and that cart_id is not indexed, which can cause full table scans.
+    key_facts: ["data-model.md", "cart_id", "not indexed", "full table"]
+
+  # ----------------------------------------------------------------- codes (4)
+  - id: 19
+    question: Which recent commits touched the payments service?
+    expected_route: codes
+    expected_tools: [get_recent_commits]
+    expected_answer: >
+      9c4e77b switched the fraud-check provider to a new endpoint and 1f88de2 removed the
+      retry wrapper around the fraud-check call — both on 2026-08-30, the same day the
+      504 rate increased.
+    key_facts: ["1f88de2", "9c4e77b", "retry"]
+
+  - id: 20
+    question: Where in the code is the cart_items query defined?
+    expected_route: codes
+    expected_tools: [search_code]
+    expected_answer: >
+      services/checkout/repository/cart_repository.py, in the get_cart_items function,
+      which runs 'SELECT * FROM cart_items WHERE cart_id = ?' with no index hint.
+    key_facts: ["cart_repository.py", "get_cart_items"]
+
+  - id: 21
+    question: What code calls the fraud check provider?
+    expected_route: codes
+    expected_tools: [search_code]
+    expected_answer: >
+      services/payments/client/fraud_check_client.py, function verify_transaction, which
+      uses a hardcoded 5000ms timeout with no retry or circuit breaker.
+    key_facts: ["fraud_check_client.py", "verify_transaction", "5000"]
+
+  - id: 22
+    question: Did any recent commit change the checkout cart query?
+    expected_route: codes
+    expected_tools: [get_recent_commits]
+    expected_answer: >
+      Yes — commit e0912fc refactored the cart_repository query building but did not add
+      an index migration.
+    key_facts: ["e0912fc", "index migration", "cart_repository"]
+
+  # --------------------------------------------------------------- support (3)
+  - id: 23
+    question: Hello, what can you help me with?
+    expected_route: support
+    expected_tools: []
+    expected_answer: >
+      A brief greeting explaining the assistant covers traces, logs, metrics, docs and
+      code.
+    key_facts: ["traces", "logs", "metrics"]
+
+  - id: 24
+    question: Thanks, that was helpful!
+    expected_route: support
+    expected_tools: []
+    expected_answer: >
+      A short acknowledgement, optionally restating the areas it can help with.
+    key_facts: []
+
+  - id: 25
+    question: What is the weather like in Berlin today?
+    expected_route: support
+    expected_tools: []
+    expected_answer: >
+      Politely explains this is out of scope and lists what it can help with —
+      traces, logs, metrics, docs and code.
+    key_facts: []
