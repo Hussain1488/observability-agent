@@ -181,6 +181,33 @@ to `support` when classification fails; the endpoint streams and rejects bad inp
 
 ---
 
+## 9. Conversation memory
+
+**Decision:** The graph is compiled with LangGraph's `InMemorySaver`, and every request
+uses a single shared thread id (`DEFAULT_THREAD_ID` in `app/core/config.py`). `ChatRequest`
+exposes `thread_id` so a caller *can* override it, but it is not required.
+
+**Why one shared thread:** The checkpointer keys conversations by `thread_id`, so something
+has to supply that key. This service has no authentication, and accepting a session id from
+the request body without auth is unsafe — any caller could pass another caller's
+`thread_id` and read their conversation history. Rather than ship a session mechanism that
+looks secure but isn't, the demo uses one obvious shared thread and states the constraint
+here.
+
+**What this means today:** all requests append to the same conversation. Multi-turn
+follow-ups work, but there is no separation between callers, and history grows without
+bound — every turn replays the full message list, tool outputs included, into the next
+prompt.
+
+**How this should work in production:** the thread id must be *derived server-side from an
+authenticated identity* and never read from the request body — an authenticated user id, an
+OIDC subject, a Slack user or channel id, or whatever the calling surface provides. That
+change is small in code (resolve `thread_id` from the auth context in the API layer) but it
+is the difference between a demo and a multi-user system, and it needs the durable
+checkpointer described in limitation 2 to be useful.
+
+---
+
 ## Known limitations
 
 These are deliberate scope choices, not oversights.
@@ -190,13 +217,17 @@ These are deliberate scope choices, not oversights.
    specialists as tools to a coordinator that can consult several and synthesise — would
    fix this while keeping the same visible architecture. This is the first thing I would
    change with more time.
-2. **Memory is in-process.** `InMemorySaver` does not survive a restart and is not shared
-   across workers. Conversations are keyed by `thread_id`; a production deployment needs a
-   Redis or Postgres checkpointer.
-3. **Routing latency.** Every request pays one classification call before any answer
+2. **Memory is in-process and shared.** `InMemorySaver` does not survive a restart and is
+   not shared across workers, and all callers currently share one thread id. A production
+   deployment needs a Redis or Postgres checkpointer plus per-user thread ids derived from
+   authentication — see [Conversation memory](#9-conversation-memory).
+3. **History is never trimmed.** Each turn replays the whole message list, tool outputs
+   included, so prompt cost grows with conversation length until the context limit is hit.
+   A production system would summarise or window older turns.
+4. **Routing latency.** Every request pays one classification call before any answer
    token appears.
-4. **No streaming error contract.** Once `200 OK` and the first byte are sent, a mid-stream
+5. **No streaming error contract.** Once `200 OK` and the first byte are sent, a mid-stream
    failure cannot change the status code. Errors currently surface as a truncated
    response rather than a structured error frame.
-5. **Tools are mocks.** Real backends (Tempo, Loki, Prometheus) would introduce auth,
+6. **Tools are mocks.** Real backends (Tempo, Loki, Prometheus) would introduce auth,
    pagination, and partial-failure handling that the current tool signatures don't model.

@@ -88,6 +88,11 @@ The API is at `http://127.0.0.1:8000`.
 
 Responds with `text/plain` streamed token by token as the agent generates it.
 
+An optional `thread_id` continues an existing conversation. It defaults to a single
+shared thread, so all callers currently share one history — see
+[Conversation memory](DESIGN.md#9-conversation-memory) for why, and what production
+would do instead.
+
 Because the response is a stream, Swagger UI at `/docs` won't render it usefully — use
 `curl -N` (the `-N` disables buffering so you see tokens arrive incrementally).
 
