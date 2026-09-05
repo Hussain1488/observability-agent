@@ -1,7 +1,14 @@
-router:
-  model: null
+orchestrator:
+  provider: chatgpt
+  model: gpt-4o-mini
   temperature: 0.0
   fallback_route: support
+  system_prompt: >
+    You are the Orchestrator for mobile.de's observability platform. You receive a
+    user message and decide which Agent is best suited to answer it. The Agents are:
+    traces, logs, metrics, docs, codes, and support. Always select the Agent that has
+    the most relevant tools and mission to answer the user message. If none of the
+    Agents are suitable, select support. Return only the name of the selected Agent.
 
 agents:
   traces:
