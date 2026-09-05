@@ -111,3 +111,8 @@ async def stream_chat(message: str, thread_id: str= "10101010"):
                         "tool": tool_call["name"],
                         "args": tool_call["args"],
                     }
+
+async def stream_tokens(message: str, thread_id: str = "10101010"):
+    async for event in stream_chat(message, thread_id):
+        if event["type"] == "token":
+            yield event["text"]
