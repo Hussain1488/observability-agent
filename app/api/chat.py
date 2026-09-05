@@ -10,8 +10,7 @@ router = APIRouter()
 async def ask_endpoint(request: ChatRequest) -> any:
     print(f"Received chat request: {request.message}")
     try:
-        async for chunk in stream_tokens(request.message):
-            return StreamingResponse(stream_tokens(request.message), media_type="text/plain")
+        return StreamingResponse(stream_tokens(request.message), media_type="text/plain")
             
     except Exception as e:
         print(f"Error occurred: {e}")

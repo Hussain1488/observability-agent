@@ -2,10 +2,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+import logging
 
 from app.core.agents import agent_names, get_agent, get_orchestrator_agent
 from app.orchestration.schemas import RoutingResponse
 
+logger = logging.getLogger(__name__)
 
 class GraphState(MessagesState):
     selected_agent: str
