@@ -45,7 +45,7 @@ questions:
   - id: 5
     question: Are there any timeouts in the distributed traces for payments?
     expected_route: traces
-    expected_tools: [get_slow_spans]
+    expected_tools: [get_slow_spans, get_trace]
     expected_answer: >
       Yes. grpc.server authorize reaches p99=5000ms and the downstream
       fraud-check.verify call times out, cascading into 504 responses.
