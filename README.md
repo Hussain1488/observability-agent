@@ -158,6 +158,87 @@ The suite never calls an LLM provider — a fake chat model is patched over the 
 factories, so tests are free and run offline. It covers agent config integrity, graph
 topology, streaming event order, router fallback, and the API endpoint.
 
+## Evaluation
+
+`evals/dataset.yaml` holds 25 questions spanning all six routes, each with an expected
+route, expected tools, a reference answer, and key facts drawn from the mock data.
+
+```bash
+python -m evals.run_eval
+```
+
+This calls the real LLM (~65 `gpt-4o-mini` calls) and writes `evals/report.md`, scoring
+three things:
+
+| Metric | What it measures |
+| --- | --- |
+| Routing accuracy | Did the orchestrator pick the right agent? (exact match) |
+| Tool selection | Did the agent call one of the expected tools? |
+| Answer grounding | Does the answer contain a key fact from the tool output? |
+
+The report includes a per-route accuracy breakdown, a table of misroutes, and for every
+question the reference answer next to the generated one.
+
+### Run history and comparison
+
+Every run writes three things:
+
+| Path | Contents |
+| --- | --- |
+| `evals/report.md` | Human-readable report for the latest run |
+| `evals/report.json` | Machine-readable latest run |
+| `evals/history/<timestamp>.json` | Permanent archive of that run |
+
+Nothing is ever overwritten in `history/`, so accuracy over time is preserved:
+
+```bash
+python -m evals.run_eval --history
+```
+
+```
+| Run              | Routing      | Tools        | Grounding    | Fully correct |
+| 2026-09-03 10:00 | 22/25 (88%)  | 21/25 (84%)  | 18/22 (82%)  | 17/25 (68%)   |
+| 2026-09-04 10:00 | 24/25 (96%)  | 24/25 (96%)  | 20/22 (91%)  | 22/25 (88%)   |
+```
+
+After the first run, each subsequent run also prints what changed — including
+per-question regressions and improvements, which aggregate scores can hide when they
+offset each other:
+
+```
+Routing accuracy   22/25 -> 24/25  (+2)
+Fully correct      19/25 -> 22/25  (+3)
+
+Regressions (1):
+  Q7   Search the logs for 504 timeout errors.   route: logs -> metrics
+```
+
+To re-print that comparison without spending anything:
+
+```bash
+python -m evals.run_eval --compare
+```
+
+### Tracing with LangSmith
+
+Set these in `.env` and every request — including eval runs — is traced with per-node
+latency, token counts, and computed cost:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=ObservabilityAgent
+```
+
+Send eval traces to their own project so they don't mix with app traffic:
+
+```powershell
+$env:LANGSMITH_PROJECT="ObservabilityAgent-evals"; python -m evals.run_eval
+```
+
+A shell variable takes precedence over `.env`, since `load_dotenv()` doesn't override
+variables already set in the environment.
+
 ## Adding an agent
 
 No Python required. Add an entry to `app/core/agents.yaml`:
