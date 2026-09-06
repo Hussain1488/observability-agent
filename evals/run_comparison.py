@@ -28,7 +28,7 @@ AGENTS_PATH = PROJECT_ROOT / "app" / "core" / "agents.yaml"
 MODELS = [
     ("gpt-4o-mini", "chatgpt", "gpt-4o-mini"),
     ("gpt-4.1-nano", "chatgpt", "gpt-4.1-nano"),
-    ("gemini-3.5-flash-lite-paid", "GoogleGenAI", "gemini-3.5-flash-lite"),
+    ("gemini-3.5-flash-lite", "GoogleGenAI", "gemini-3.5-flash-lite"),
     ("gemini-3.1-flash-lite", "GoogleGenAI", "gemini-3.1-flash-lite"),
 ]
 

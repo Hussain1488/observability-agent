@@ -280,9 +280,7 @@ resolve their paths from the project root, so they run from any working director
 | `gpt-4.1-nano` | 96% | 92% | **0.000225** | 3.88s |
 | `gpt-4o-mini` (shipped) | 100% | 92% | 0.000339 | 4.52s |
 | `gemini-3.1-flash-lite` | 100% | 96% | 0.000686 | 2.33s |
-| `gemini-3.5-flash-lite` * | 100% | **100%** | 0.000940 | **1.95s** |
-
-\* Measured on a paid Google API key. The same model on a free-tier key measured 9.25s per question at the same cost -- free-tier throttling, not the model. Both gemini rows above are paid-tier figures.
+| `gemini-3.5-flash-lite` | 100% | **100%** | 0.000940 | **1.95s** |
 
 `gpt-4o-mini` ships as the default because it routes perfectly and costs little.
 `gpt-4.1-nano` matches its accuracy for a third less, and `gemini-3.5-flash-lite` scores
