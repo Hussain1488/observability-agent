@@ -225,7 +225,7 @@ Set these in `.env` and every request — including eval runs — is traced with
 latency, token counts, and computed cost:
 
 ```env
-LANGSMITH_TRACING=true
+LANGCHAIN_TRACING_V2=true
 LANGSMITH_API_KEY=lsv2_...
 LANGSMITH_PROJECT=ObservabilityAgent
 ```
@@ -238,6 +238,68 @@ $env:LANGSMITH_PROJECT="ObservabilityAgent-evals"; python -m evals.run_eval
 
 A shell variable takes precedence over `.env`, since `load_dotenv()` doesn't override
 variables already set in the environment.
+
+### Labelling a run
+
+Any environment variable starting with `LANGCHAIN_` or `LANGSMITH_` is copied into the
+metadata of every trace, so a run can be named and filtered later without code changes:
+
+```powershell
+$env:LANGSMITH_RUN_LABEL="baseline"; python -m evals.run_eval
+```
+
+In LangSmith, filter on metadata key `LANGSMITH_RUN_LABEL`. LangSmith also adds
+`revision_id` from `git describe` on its own, so runs are separable by commit even
+without a label.
+
+## Comparing models on cost
+
+Accuracy alone doesn't answer the question that matters for spend: *would a cheaper model
+give the same result?* Three scripts answer it against the same 25 questions.
+
+| Script | Does |
+| --- | --- |
+| `run_comparison.py` | Runs the evaluation once per model, restoring `agents.yaml` afterwards |
+| `langsmith_report_download.py` | Pulls each trace's cost, tokens, latency, and model into `langsmith_records.json` |
+| `compare_models.py` | Joins those against the eval scores and prints one row per run |
+
+```bash
+python run_comparison.py --dry-run    # show the plan, spend nothing
+python run_comparison.py              # every model in its MODELS list
+python compare_models.py --csv out.csv
+```
+
+`run_comparison.py` rewrites only the `provider:`/`model:` lines in `agents.yaml` and puts
+the original back in a `finally` block, so the file survives a crash or a Ctrl-C.
+
+### Result
+
+| Model | Routing | Accuracy | $/question | Latency |
+| --- | --- | --- | --- | --- |
+| `gpt-4.1-nano` | 96% | 92% | **0.000225** | 3.88s |
+| `gpt-4o-mini` (shipped) | 100% | 92% | 0.000339 | 4.52s |
+| `gemini-3.1-flash-lite` | 100% | 96% | 0.000686 | 2.33s |
+| `gemini-3.5-flash-lite` | 100% | **100%** | 0.000940 | **1.95s** |
+
+`gpt-4o-mini` ships as the default because it routes perfectly and costs little.
+`gpt-4.1-nano` matches its accuracy for a third less, and `gemini-3.5-flash-lite` scores
+highest and answers fastest at roughly three times the cost — so the choice is a real
+trade-off rather than a single winner.
+
+Three caveats worth stating.
+
+**These are one run each, and the accuracy column is noisy.** A second `gpt-4o-mini` run
+scored 22/25 (88%) -- the figure in `evals/report.md` -- against 23/25 here. Routing was
+25/25 both times. `temperature: 0` pins the routing decision but not the wording of an
+answer, and the grounding check looks for a key fact as a plain substring, so a rephrased
+answer can miss one. Treat differences of one or two questions as noise and rerun before
+drawing a conclusion.
+
+**The cost and latency columns are reliable.** Those gaps are large, come straight from
+LangSmith's own token accounting, and hold across runs.
+
+**Accuracy is joined to traces by running order**, not by a shared run id, so check the
+order looks right before trusting a close comparison.
 
 ## Adding an agent
 
@@ -275,4 +337,10 @@ app/
   tools/
     tools.py                 mock observability tools + registry
 tests/                       offline test suite
+evals/
+  run_eval.py                evaluation harness
+  dataset.yaml               25 questions with expected route, tools, key facts
+run_comparison.py            run the evaluation once per model
+langsmith_report_download.py pull cost/latency/model per trace from LangSmith
+compare_models.py            join accuracy against cost, one row per run
 ```

@@ -10,3 +10,5 @@ __pycache__/
 
 # Log files
 *.log
+# LangSmith trace dumps
+langsmith_records.json

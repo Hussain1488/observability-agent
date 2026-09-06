@@ -163,6 +163,15 @@ behaviour testable.
 The graph is built once and cached (`get_graph()`), so model clients are constructed at
 startup rather than per request.
 
+**Verified, not assumed.** The default was checked rather than guessed: the same 25
+questions were run against four models, with cost and latency read from LangSmith traces
+and joined to the eval scores (see [Comparing models on cost](README.md#comparing-models-on-cost)).
+`gpt-4o-mini` routes perfectly at roughly 3.4 cents per hundred questions.
+`gpt-4.1-nano` matches its accuracy for a third less, and `gemini-3.5-flash-lite` scores
+highest and answers fastest at about three times the cost. `gpt-4o-mini` ships because it
+sits at the sensible middle of that trade-off, and the tooling is in the repo so the
+decision can be re-checked whenever prices or models change.
+
 ---
 
 ## 8. Testing without spending money
@@ -228,7 +237,9 @@ These are deliberate scope choices, not oversights.
 4. **Routing latency.** Every request pays one classification call before any answer
    token appears.
 5. **No streaming error contract.** Once `200 OK` and the first byte are sent, a mid-stream
-   failure cannot change the status code. Errors currently surface as a truncated
-   response rather than a structured error frame.
+   failure cannot change the status code. The stream is guarded, so a failure is logged
+   and the response ends with a visible `[error]` notice rather than truncating in
+   silence -- but a client still cannot tell a failed answer from a complete one by
+   status code alone. Server-sent events with a typed `error` frame would fix that.
 6. **Tools are mocks.** Real backends (Tempo, Loki, Prometheus) would introduce auth,
    pagination, and partial-failure handling that the current tool signatures don't model.
