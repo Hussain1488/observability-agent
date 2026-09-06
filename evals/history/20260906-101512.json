@@ -451,5 +451,6 @@
       "answer": "I'm sorry, but that's out of my scope. I can help with questions related to observability, such as service performance or error rates. If you have a specific question about a service or metric, feel free to ask!",
       "error": ""
     }
-  ]
+  ],
+  "run_label": "gpt-4o-mini-final"
 }

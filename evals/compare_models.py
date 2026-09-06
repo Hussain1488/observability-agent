@@ -2,15 +2,15 @@
 
 Reads the two files that already exist:
 
-  langsmith_records.json  - written by langsmith_report_download.py (cost, speed, models)
+  evals/langsmith_records.json - written by langsmith_report_download.py (cost, speed, models)
   evals/history/*.json    - written by evals.run_eval               (accuracy)
 
 and prints one row per run so a cheaper model can be compared against a bigger
 one on the same questions.
 
 Usage:
-    python compare_models.py
-    python compare_models.py --csv comparison.csv
+    python evals/compare_models.py
+    python evals/compare_models.py --csv comparison.csv
 
 Nothing in app/ or evals/ is imported or modified.
 """
@@ -22,8 +22,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-RECORDS_PATH = Path("langsmith_records.json")
-HISTORY_DIR = Path("evals/history")
+HERE = Path(__file__).resolve().parent
+RECORDS_PATH = HERE / "langsmith_records.json"
+HISTORY_DIR = HERE / "history"
 
 # stream_chat() is called with thread_id=f"eval-{id}", so this is what marks a
 # trace as belonging to an evaluation run rather than a real user request.
@@ -109,22 +110,59 @@ def load_eval_runs(directory: Path) -> list[dict]:
 def match_eval_runs(
     groups: dict[str, dict], eval_runs: list[dict]
 ) -> dict[str, dict | None]:
-    """Pair each trace group with one eval run by running order.
+    """Pair each trace group with the eval run that produced it.
 
-    The traces carry no eval-run id, so order in time is the only link available
-    without changing the eval runner. Pairing is by rank, not by clock distance:
-    the eval archives are stamped in local time while LangSmith reports UTC, and
-    a fixed offset shifts every distance equally but leaves the order intact.
+    Preferred join: the run label. Both sides record it -- LangSmith copies
+    LANGSMITH_RUN_LABEL into every trace, and run_eval.py writes the same value
+    into its archive -- so the match is exact.
+
+    Fallback for archives written before that field existed: pair whatever is
+    left over by running order. That is only sound when the two sides have the
+    same number of entries, so it warns when they do not.
     """
-    dated = sorted((r for r in eval_runs if r["_time"]), key=lambda r: r["_time"])
-    ordered = sorted(
-        (label for label, g in groups.items() if g["latest"]),
+    matches: dict[str, dict | None] = {label: None for label in groups}
+    claimed: set[str] = set()
+
+    by_label: dict[str, dict] = {}
+    for run in eval_runs:
+        label = run.get("run_label")
+        if label:
+            by_label.setdefault(str(label), run)
+
+    for label in groups:
+        run = by_label.get(label)
+        if run is not None:
+            matches[label] = run
+            claimed.add(run["_file"])
+
+    leftover_runs = sorted(
+        (r for r in eval_runs if r["_file"] not in claimed and r["_time"]),
+        key=lambda r: r["_time"],
+    )
+    leftover_groups = sorted(
+        (
+            label
+            for label, g in groups.items()
+            if matches[label] is None and g["latest"]
+        ),
         key=lambda label: groups[label]["latest"],
     )
 
-    matches: dict[str, dict | None] = {label: None for label in groups}
-    for label, run in zip(ordered, dated):
+    if leftover_groups and len(leftover_groups) != len(leftover_runs):
+        # Rows matched on a label above are exact and unaffected by this; only
+        # the leftovers are unresolvable, so they are left blank rather than
+        # guessed at.
+        print(
+            f"Left unmatched: {', '.join(leftover_groups)}. "
+            f"{len(leftover_groups)} trace group(s) carry no run label but "
+            f"{len(leftover_runs)} eval archive(s) are spare, and order pairing "
+            "needs equal numbers. Rows matched by label are unaffected."
+        )
+        return matches
+
+    for label, run in zip(leftover_groups, leftover_runs):
         matches[label] = run
+
     return matches
 
 
@@ -142,7 +180,7 @@ def summarise(group: dict, eval_run: dict | None) -> dict:
         "accuracy": None,
         "routing": None,
         "eval_file": None,
-        "skew_seconds": None,
+        "matched_by": None,
     }
 
     if eval_run:
@@ -150,10 +188,7 @@ def summarise(group: dict, eval_run: dict | None) -> dict:
         row["accuracy"] = summary["fully_correct"] / summary["total"]
         row["routing"] = summary["routing"] / summary["total"]
         row["eval_file"] = eval_run["_file"]
-        if group["latest"] and eval_run["_time"]:
-            row["skew_seconds"] = abs(
-                (eval_run["_time"] - group["latest"]).total_seconds()
-            )
+        row["matched_by"] = "label" if eval_run.get("run_label") else "order"
 
     return row
 
@@ -186,7 +221,7 @@ def print_table(rows: dict[str, dict]) -> None:
     if stale:
         print(
             "\nSome runs show no cost. Either langsmith_records.json predates the "
-            "cost fields (re-run langsmith_report_download.py), or LangSmith has "
+            "cost fields (re-run evals/langsmith_report_download.py), or LangSmith has "
             "no pricing for that model (add it under Settings -> Models)."
         )
 
@@ -198,10 +233,14 @@ def print_table(rows: dict[str, dict]) -> None:
             + " (fewer eval archives than trace groups)."
         )
 
-    print(
-        "\nAccuracy is paired to traces by running order, not by a run id. "
-        "Check the run order looks right before trusting a close comparison."
-    )
+    unlabelled = [label for label, r in rows.items() if r["matched_by"] == "order"]
+    if unlabelled:
+        print(
+            "\nPaired by running order (no run label): "
+            + ", ".join(unlabelled)
+            + ". Set LANGSMITH_RUN_LABEL when running the evaluation to make "
+            "this an exact match."
+        )
 
 
 def write_csv(rows: dict[str, dict], path: Path) -> None:
@@ -226,7 +265,7 @@ def write_csv(rows: dict[str, dict], path: Path) -> None:
 
 def main(csv_path: Path | None) -> None:
     if not RECORDS_PATH.exists():
-        print(f"{RECORDS_PATH} not found. Run langsmith_report_download.py first.")
+        print(f"{RECORDS_PATH} not found. Run evals/langsmith_report_download.py first.")
         return
 
     groups = load_trace_groups(RECORDS_PATH)

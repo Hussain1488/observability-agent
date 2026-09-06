@@ -1,9 +1,16 @@
 from langsmith import Client
 import json
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
+HERE = Path(__file__).resolve().parent
+PROJECT_ROOT = HERE.parent
+RECORDS_PATH = HERE / "langsmith_records.json"
+
+# Load the project .env whatever directory this is run from.
+load_dotenv(PROJECT_ROOT / ".env")
 client = Client()
 
 PROJECT = "ObservabilityAgent"
@@ -78,5 +85,7 @@ for run in runs:
         "total_cost": run.total_cost,
     })
 
-with open("langsmith_records.json", "w") as f:
+with RECORDS_PATH.open("w", encoding="utf-8") as f:
     json.dump(records, f, indent=2, default=str)
+
+print(f"Wrote {len(records)} traces to {RECORDS_PATH}")

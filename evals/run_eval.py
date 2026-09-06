@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -122,6 +123,9 @@ def summarise(results: list[Result]) -> dict[str, int]:
 def write_json(results: list[Result], path: Path) -> dict:
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        # Same label LangSmith stamps on the traces, so a report can be joined
+        # to its traces exactly instead of by guessing from timestamps.
+        "run_label": os.getenv("LANGSMITH_RUN_LABEL"),
         "summary": summarise(results),
         "results": [
             {

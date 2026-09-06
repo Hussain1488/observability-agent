@@ -456,5 +456,6 @@
       "answer": "That question is out of scope, as I only handle observability topics like traces, logs, metrics, docs, and code for mobile.de.",
       "error": ""
     }
-  ]
+  ],
+  "run_label": "gemini-3.5-flash-lite-paid"
 }

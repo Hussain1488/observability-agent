@@ -259,18 +259,19 @@ give the same result?* Three scripts answer it against the same 25 questions.
 
 | Script | Does |
 | --- | --- |
-| `run_comparison.py` | Runs the evaluation once per model, restoring `agents.yaml` afterwards |
-| `langsmith_report_download.py` | Pulls each trace's cost, tokens, latency, and model into `langsmith_records.json` |
-| `compare_models.py` | Joins those against the eval scores and prints one row per run |
+| `evals/run_comparison.py` | Runs the evaluation once per model, restoring `agents.yaml` afterwards |
+| `evals/langsmith_report_download.py` | Pulls each trace's cost, tokens, latency, and model into `evals/langsmith_records.json` |
+| `evals/compare_models.py` | Joins those against the eval scores and prints one row per run |
 
 ```bash
-python run_comparison.py --dry-run    # show the plan, spend nothing
-python run_comparison.py              # every model in its MODELS list
-python compare_models.py --csv out.csv
+python evals/run_comparison.py --dry-run    # show the plan, spend nothing
+python evals/run_comparison.py              # every model in its MODELS list
+python evals/compare_models.py --csv out.csv
 ```
 
 `run_comparison.py` rewrites only the `provider:`/`model:` lines in `agents.yaml` and puts
-the original back in a `finally` block, so the file survives a crash or a Ctrl-C.
+the original back in a `finally` block, so the file survives a crash or a Ctrl-C. All three
+resolve their paths from the project root, so they run from any working directory.
 
 ### Result
 
@@ -298,8 +299,10 @@ drawing a conclusion.
 **The cost and latency columns are reliable.** Those gaps are large, come straight from
 LangSmith's own token accounting, and hold across runs.
 
-**Accuracy is joined to traces by running order**, not by a shared run id, so check the
-order looks right before trusting a close comparison.
+**Label your runs.** `run_eval.py` writes `LANGSMITH_RUN_LABEL` into its archive and
+LangSmith stamps the same value on every trace, so the two sides join exactly. Without a
+label the tool falls back to pairing by running order, and if the counts don't line up it
+says so and leaves the accuracy blank rather than guessing.
 
 ## Adding an agent
 
@@ -340,7 +343,8 @@ tests/                       offline test suite
 evals/
   run_eval.py                evaluation harness
   dataset.yaml               25 questions with expected route, tools, key facts
-run_comparison.py            run the evaluation once per model
-langsmith_report_download.py pull cost/latency/model per trace from LangSmith
-compare_models.py            join accuracy against cost, one row per run
+  run_comparison.py          run the evaluation once per model
+  langsmith_report_download.py  pull cost/latency/model per trace from LangSmith
+  compare_models.py          join accuracy against cost, one row per run
+  history/                   one archived JSON per run, never overwritten
 ```

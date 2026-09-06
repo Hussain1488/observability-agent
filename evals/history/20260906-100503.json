@@ -456,5 +456,6 @@
       "answer": "I am the observability assistant for mobile.de, and I only handle technical questions regarding our systems, such as traces, logs, metrics, documentation, or code. Your request is outside of my scope.",
       "error": ""
     }
-  ]
+  ],
+  "run_label": "gemini-3.1-flash-lite"
 }

@@ -457,5 +457,6 @@
       "answer": "That question is out of scope, as I can only help with observability topics like traces, logs, metrics, documentation, and code.",
       "error": ""
     }
-  ]
+  ],
+  "run_label": "gemini-3.5-flash-lite"
 }

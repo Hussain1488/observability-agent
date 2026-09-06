@@ -8,9 +8,9 @@ Each run is labelled through LANGSMITH_RUN_LABEL, which LangSmith copies into
 the metadata of every trace, so the runs can be told apart later.
 
 Usage:
-    python run_comparison.py                 # all models below
-    python run_comparison.py --only gpt-4o-mini
-    python run_comparison.py --dry-run       # show the plan, spend nothing
+    python evals/run_comparison.py                 # all models below
+    python evals/run_comparison.py --only gpt-4o-mini
+    python evals/run_comparison.py --dry-run       # show the plan, spend nothing
 """
 
 import argparse
@@ -20,7 +20,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-AGENTS_PATH = Path("app/core/agents.yaml")
+HERE = Path(__file__).resolve().parent
+PROJECT_ROOT = HERE.parent
+AGENTS_PATH = PROJECT_ROOT / "app" / "core" / "agents.yaml"
 
 # (label, provider, model). Provider must match _build_model() in app/core/agents.py.
 MODELS = [
@@ -56,18 +58,20 @@ def check_langsmith() -> bool:
 
 def run_eval(label: str) -> bool:
     env = {**os.environ, "LANGSMITH_RUN_LABEL": label}
-    result = subprocess.run([sys.executable, "-m", "evals.run_eval"], env=env)
+    result = subprocess.run(
+        [sys.executable, "-m", "evals.run_eval"], env=env, cwd=PROJECT_ROOT
+    )
     return result.returncode == 0
 
 
 def run_step(description: str, command: list[str]) -> bool:
     print(f"\n=== {description} ===")
-    return subprocess.run(command).returncode == 0
+    return subprocess.run(command, cwd=PROJECT_ROOT).returncode == 0
 
 
 def main(only: str | None, dry_run: bool, skip_trace_check: bool) -> None:
     if not AGENTS_PATH.exists():
-        print(f"{AGENTS_PATH} not found. Run this from the project root.")
+        print(f"{AGENTS_PATH} not found.")
         return
 
     planned = [m for m in MODELS if only is None or m[0] == only]
@@ -78,7 +82,7 @@ def main(only: str | None, dry_run: bool, skip_trace_check: bool) -> None:
 
     print("Planned runs (25 questions each):")
     for label, provider, model in planned:
-        print(f"  {label:<20} provider={provider:<12} model={model}")
+        print(f"  {label:<28} provider={provider:<12} model={model}")
 
     print("\nChecking LangSmith...")
     traced = check_langsmith()
@@ -123,10 +127,11 @@ def main(only: str | None, dry_run: bool, skip_trace_check: bool) -> None:
 
     if traced:
         run_step(
-            "Downloading traces", [sys.executable, "langsmith_report_download.py"]
+            "Downloading traces",
+            [sys.executable, str(HERE / "langsmith_report_download.py")],
         )
 
-    run_step("Comparison", [sys.executable, "compare_models.py"])
+    run_step("Comparison", [sys.executable, str(HERE / "compare_models.py")])
 
 
 if __name__ == "__main__":

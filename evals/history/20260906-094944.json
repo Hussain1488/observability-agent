@@ -453,5 +453,6 @@
       "answer": "Hello! I'm here to help with observability topics like traces, logs, metrics, docs, and code. For weather information, you might want to check a weather service or app instead. How can I assist you with our system's performance or logs?",
       "error": ""
     }
-  ]
+  ],
+  "run_label": "gpt-4.1-nano"
 }
